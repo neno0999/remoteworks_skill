@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   sync:
@@ -35,14 +36,27 @@ jobs:
               assert isinstance(p['affiliate'], bool), p['id']
           print('ok', len(new['platforms']))
           PY
-      - name: Copy, test, commit if changed
+      - name: Copy, test, open a PR if changed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE: ${{ github.event.repository.default_branch }}
         run: |
           cp /tmp/platforms.json skills/remoteworks-matcher/data/platforms.json
           python3 -m unittest discover -s tests
-          if ! git diff --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -A
-            git commit -m "chore(data): sync platforms.json from wasian.my.id"
-            git push || { echo "::error::push failed (is the branch protected? allow github-actions[bot] or switch this step to open a PR)"; exit 1; }
+          if git diff --quiet; then
+            echo "Snapshot already up to date, nothing to do."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B data-sync
+          git add skills/remoteworks-matcher/data/platforms.json
+          git commit -m "chore(data): sync platforms.json from wasian.my.id"
+          git push --force origin data-sync
+          if [ -z "$(gh pr list --head data-sync --state open --json number -q '.[0].number')" ]; then
+            gh pr create --base "$BASE" --head data-sync \
+              --title "chore(data): sync platforms.json from wasian.my.id" \
+              --body "Automated weekly data sync. The validation step and the unit tests passed. Review the diff, then merge."
+          else
+            echo "An open sync PR already exists; the branch was updated."
           fi

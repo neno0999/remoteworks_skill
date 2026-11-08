@@ -5,8 +5,8 @@ Data: live JSON from https://wasian.my.id/remoteworks/platforms.json
 (CC BY 4.0), falling back to the bundled snapshot in ../data/platforms.json.
 
 Examples:
-  python3 match.py --about "desainer grafis pemula di Indonesia, cari freelance"
-  python3 match.py --skills design,writing --level mid --want freelance --country ID --json
+  python3 match.py --about "beginner graphic designer in the Philippines, looking for freelance clients"
+  python3 match.py --skills design,writing --level mid --want freelance --country PH --json
 
 Integrity rule: the `affiliate` flag is NEVER used for scoring. score() only
 receives a copy of each platform with that key removed, so it cannot influence
@@ -54,7 +54,37 @@ WANTS = {
     "microtask": r"micro ?task|receh|sampingan|side income|tugas kecil|survey berbayar|part[- ]?time santai",
     "freelance": r"freelanc|proyek|project|klien|client|lepas",
 }
-COUNTRY_RX = r"indonesia|indo\b|wni\b|rupiah"
+# ISO code -> (text pattern, region). Region is only used for a small, non-exclusive bonus:
+# the dataset has no per-country eligibility data, so every platform stays visible to everyone.
+COUNTRIES = {
+    "ID": (r"indonesia|indo\b|wni\b|rupiah", "asia"),
+    "PH": (r"philippines|filipino|pinoy", "asia"),
+    "IN": (r"india\b|indian", "asia"),
+    "VN": (r"vietnam", "asia"), "TH": (r"thailand", "asia"), "MY": (r"malaysia", "asia"),
+    "SG": (r"singapore", "asia"), "PK": (r"pakistan", "asia"), "BD": (r"bangladesh", "asia"),
+    "TW": (r"taiwan", "asia"),
+    "NG": (r"nigeria", "africa"), "KE": (r"kenya", "africa"), "GH": (r"ghana", "africa"),
+    "ZA": (r"south africa", "africa"), "EG": (r"egypt", "africa"),
+    "BR": (r"brazil|brasil", "latam"), "AR": (r"argentina", "latam"), "MX": (r"mexic", "latam"),
+    "CO": (r"colombia", "latam"), "CL": (r"chile\b", "latam"),
+    "DE": (r"germany|german\b", "europe"), "FR": (r"france|french", "europe"),
+    "ES": (r"spain|spanish", "europe"), "PL": (r"poland|polish", "europe"),
+    "PT": (r"portugal", "europe"), "NL": (r"netherlands|dutch", "europe"),
+    "GB": (r"united kingdom|\buk\b|britain|british", "europe"), "IT": (r"italy|italian", "europe"),
+}
+REGION_WORDS = {  # region named directly, no country
+    "asia": r"southeast asia|\bsea\b|asia\b|asian",
+    "africa": r"africa",
+    "europe": r"europe|\beu\b",
+    "latam": r"latin america|latam",
+}
+# derived hint about where a platform is focused, read from its own descriptive text
+PLATFORM_REGION_RX = {
+    "asia": r"\basia|\bsea\b|southeast asia|indonesia|taiwan",
+    "africa": r"africa",
+    "europe": r"europe|\beu\b|european|\bfrench\b",
+    "latam": r"latin america|spanish/portuguese",
+}
 
 
 def _rx(pattern):
@@ -65,7 +95,14 @@ def _rx(pattern):
 SYNONYMS_RX = {k: _rx(v) for k, v in SYNONYMS.items()}
 LEVELS_RX = {k: _rx(v) for k, v in LEVELS.items()}
 WANTS_RX = {k: _rx(v) for k, v in WANTS.items()}
-COUNTRY_RE = _rx(COUNTRY_RX)
+COUNTRY_RX_C = {k: _rx(v[0]) for k, v in COUNTRIES.items()}
+REGION_WORDS_RX = {k: _rx(v) for k, v in REGION_WORDS.items()}
+PLATFORM_REGION_RX_C = {k: _rx(v) for k, v in PLATFORM_REGION_RX.items()}
+# signals in a platform's own `best_fit` text about the level it welcomes
+FIT_BEGINNER_RX = _rx(r"entry|beginner|fresh|junior|new to|early[- ]career|young professional")
+FIT_SENIOR_RX = _rx(r"senior|experienced|expert|strong portfolio|mid to senior")
+FEE_GOOD_RX = _rx(r"0%|no fee|free\b|no commission")
+FEE_COST_RX = _rx(r"subscription|credit purchase|membership|monthly fee|paid plan|premium")
 
 # words that say nothing about the person's field; excluded from keyword matching
 STOPWORDS = set("""
@@ -186,9 +223,42 @@ def score(p, prof):
         adj = {"vetted_network": 3}.get(t, 0)
     pts += adj
 
-    if prof["country"] == "ID" and p.get("indonesia_focus"):
-        pts += 10
-        reasons.append("explicitly targets Indonesia")
+    # Tie-breakers (total at most +6/-1): kept small on purpose so they never override skill or goal fit.
+    # specialist platforms beat generalists for the same skill match (max +3)
+    if req and p["skills"] and p["skills"] != ["general"]:
+        overlap = req & set(p["skills"])
+        if overlap:
+            pts += 3.0 * len(overlap) / len(p["skills"])
+
+    # level wording in the platform's own description (max +2)
+    fit = (p.get("best_fit") or "").lower()
+    if lvl == "beginner" and FIT_BEGINNER_RX.search(fit):
+        pts += 2
+        reasons.append("describes itself as open to newcomers")
+    elif lvl == "senior" and FIT_SENIOR_RX.search(fit):
+        pts += 2
+        reasons.append("describes itself as suited to experienced people")
+
+    # what it costs the worker (-1 to +1); this is the platform's fee, not any affiliate data
+    fee = (p.get("fee") or "").lower()
+    if FEE_GOOD_RX.search(fee):
+        pts += 1
+    elif FEE_COST_RX.search(fee):
+        pts -= 1
+        reasons.append("worker-side cost, check the fee")
+
+    # regional focus: small, non-exclusive bonus (no per-country eligibility data exists)
+    region = prof.get("region")
+    if region:
+        if prof["country"] == "ID" and p.get("indonesia_focus"):
+            pts += 10
+            reasons.append("explicitly targets Indonesia")
+        else:
+            text = " ".join([p.get("best_fit", ""), p.get("work_type", ""), p.get("category", "")]).lower()
+            local_only_elsewhere = p.get("indonesia_focus") and prof["country"] != "ID"  # Indonesia-local, not for other Asian users
+            if not local_only_elsewhere and PLATFORM_REGION_RX_C[region].search(text):
+                pts += 6
+                reasons.append(f"regional focus: {region} (derived from text)")
     return max(0.0, min(100.0, pts)), reasons
 
 
@@ -210,13 +280,24 @@ def build_profile(args):
         raise SystemExit(f"unknown skill tags: {sorted(unknown)}; valid: {sorted(SYNONYMS)}")
     level = args.level or infer(about, LEVELS_RX, "mid")
     want = args.want or infer(about, WANTS_RX, "any")
-    country = (args.country or ("ID" if COUNTRY_RE.search(about.lower()) else "")).upper()
-    known = list(SYNONYMS_RX.values()) + list(LEVELS_RX.values()) + list(WANTS_RX.values()) + [COUNTRY_RE]
+    country = (args.country or "").upper()
+    if not country:
+        for code, rx in COUNTRY_RX_C.items():
+            if rx.search(about.lower()):
+                country = code
+                break
+    region = COUNTRIES[country][1] if country in COUNTRIES else None
+    if not region:
+        for name, rx in REGION_WORDS_RX.items():
+            if rx.search(about.lower()):
+                region = name
+                break
+    known = list(SYNONYMS_RX.values()) + list(LEVELS_RX.values()) + list(WANTS_RX.values()) + list(COUNTRY_RX_C.values()) + list(REGION_WORDS_RX.values())
     kws = []
     for w in re.findall(r"[a-zA-Z]{4,}", about.lower()):
         if w not in STOPWORDS and w not in kws and not any(rx.search(w) for rx in known):
             kws.append(w)
-    return {"skills": skills, "level": level, "want": want, "country": country, "keywords": kws[:8]}
+    return {"skills": skills, "level": level, "want": want, "country": country, "region": region, "keywords": kws[:8]}
 
 
 def main(argv=None):
@@ -225,7 +306,7 @@ def main(argv=None):
     ap.add_argument("--skills", help="comma separated skill tags, e.g. design,writing")
     ap.add_argument("--level", choices=["beginner", "mid", "senior"])
     ap.add_argument("--want", choices=["freelance", "employment", "microtask", "any"])
-    ap.add_argument("--country", help="ISO code, e.g. ID")
+    ap.add_argument("--country", help="ISO 3166 country code, e.g. PH, NG, BR, DE (any country works; known ones also set a region)")
     ap.add_argument("--top", type=int, default=8)
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--url", default=DEFAULT_URL)
@@ -255,7 +336,7 @@ def main(argv=None):
         }, indent=2, ensure_ascii=False))
         return 0
 
-    print(f"Profile: skills={sorted(prof['skills']) or 'any'} level={prof['level']} want={prof['want']} country={prof['country'] or '-'}")
+    print(f"Profile: skills={sorted(prof['skills']) or 'any'} level={prof['level']} want={prof['want']} country={prof['country'] or '-'} region={prof['region'] or '-'}")
     print(f"Data: {source} ({len(doc['platforms'])} platforms)\n")
     for it in items:
         tag = " [Affiliate]" if it["affiliate"] else ""

@@ -72,8 +72,10 @@ class Sanity(unittest.TestCase):
             self.assertNotEqual(p["type"], "company_careers", p["id"])
 
     def test_employment_prefers_careers_and_boards(self):
-        types = {p["type"] for p in self.top("senior developer, full-time job", 4)}
-        self.assertTrue(types <= {"company_careers", "job_board", "staffing"}, types)
+        # vetted networks may appear (some place people into long-term roles), but goal fit must dominate
+        top = self.top("senior developer, full-time job", 8)
+        self.assertTrue({p["type"] for p in top} <= {"company_careers", "job_board", "staffing", "vetted_network"})
+        self.assertGreaterEqual(sum(p["type"] in ("company_careers", "job_board", "staffing") for p in top), 3)
 
     def test_indonesia_bonus(self):
         ids = [p["id"] for p in self.top("designer in Indonesia, freelance", 3)]
@@ -86,6 +88,39 @@ class Sanity(unittest.TestCase):
     def test_deterministic(self):
         prof = profile("writer, freelance")
         self.assertEqual(order(DOC["platforms"], prof), order(DOC["platforms"], prof))
+
+
+class TieBreakAndRegion(unittest.TestCase):
+    def ranked(self, text):
+        return match.rank(DOC["platforms"], profile(text))
+
+    def test_scores_are_differentiated(self):
+        for text in ("designer freelance", "developer full-time", "translator freelance"):
+            top = [round(s, 1) for s, *_ in self.ranked(text)[:10]]
+            self.assertGreaterEqual(len(set(top)), 5, f"{text}: {top}")
+
+    def test_specialist_beats_generalist_for_same_skill(self):
+        by_id = {p["id"]: s for s, _, p, _ in self.ranked("designer freelance")}
+        spec = [p["id"] for p in DOC["platforms"] if p["skills"] == ["design"] and p["type"] == "marketplace"]
+        gen = [p["id"] for p in DOC["platforms"] if len(p["skills"]) >= 6 and "design" in p["skills"] and p["type"] == "marketplace"]
+        if spec and gen:
+            self.assertGreater(max(by_id[i] for i in spec), min(by_id[i] for i in gen))
+
+    def test_non_indonesian_gets_no_indonesia_local_boost(self):
+        top = [p["id"] for _, _, p, _ in self.ranked("designer from the Philippines, freelance")[:6]]
+        self.assertNotIn("freelancercoid", top)
+        self.assertNotIn("projectscoid", top)
+
+    def test_regions_from_country_and_text(self):
+        self.assertEqual(profile("writer from Nigeria")["region"], "africa")
+        self.assertEqual(profile("dev in Brazil")["region"], "latam")
+        self.assertEqual(profile("designer in Germany")["region"], "europe")
+        self.assertEqual(profile("designer in the Philippines")["region"], "asia")
+        self.assertIsNone(profile("designer")["region"])
+
+    def test_region_bonus_never_excludes(self):
+        ids = {p["id"] for _, _, p, _ in self.ranked("designer from Nigeria")}
+        self.assertEqual(len(ids), len(DOC["platforms"]))
 
 
 class TextParsing(unittest.TestCase):
