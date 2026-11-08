@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Fetch live data
-        run: curl -fsSL --retry 3 -o /tmp/platforms.json https://wasian.my.id/remoteworks/platforms.json
+        run: curl -fsSL --retry 3 -A "remoteworks-skill-sync/1.0 (+https://github.com/neno0999/remoteworks_skill)" -o /tmp/platforms.json https://wasian.my.id/remoteworks/platforms.json
       - name: Validate (refuse broken or shrunken data)
         run: |
           python3 - <<'PY'
