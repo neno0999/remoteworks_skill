@@ -43,7 +43,7 @@ The tie-breakers are small on purpose, so they separate near-equal platforms but
 
 ### Worldwide, no country filter
 
-The list is meant for remote work anywhere, so the matcher never asks for or filters by your country, and every user gets the same ranking for the same profile. The dataset has no per-country eligibility data, so check that a platform accepts workers from your country before signing up. The 8 platforms flagged `indonesia_focus` (for example Jobstreet, Kalibrr, Glints) are local to Indonesia: they are kept in the data and get a visible caveat, with no change to their score.
+The list is meant for remote work anywhere, so the matcher never asks for your country, and every user gets the same ranking for the same profile. The dataset has no per-country eligibility data, so check that a platform accepts workers from your country before signing up. The 8 platforms flagged `indonesia_focus` (for example Jobstreet, Kalibrr, Glints) are local to Indonesia, so they are left out of the results by default. Pass `--include-local` to rank them too (they then show an "Indonesia-focused" caveat).
 
 Skill tags, type and the Indonesia flag are **derived automatically** from the source text, so treat them as hints, not verified facts. Always check a platform's own terms, fees, payout options and whether it accepts workers from your country.
 

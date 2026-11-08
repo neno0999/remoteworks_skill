@@ -109,13 +109,23 @@ class TieBreak(unittest.TestCase):
         self.assertNotIn("country", profile("designer in Brazil"))
         self.assertNotIn("region", profile("designer in Brazil"))
 
-    def test_indonesia_local_platforms_get_a_caveat_not_a_score_change(self):
-        local = [p for p in DOC["platforms"] if p.get("indonesia_focus")]
+    def test_local_platforms_excluded_by_default(self):
+        import io, contextlib
+        local = {p["id"] for p in DOC["platforms"] if p.get("indonesia_focus")}
         self.assertTrue(local)
-        prof = profile("developer, full-time job")
-        for score, _, p, why in match.rank(DOC["platforms"], prof):
-            has = any("Indonesia-focused" in w for w in why)
-            self.assertEqual(has, bool(p.get("indonesia_focus")), p["id"])
+        self.assertFalse(local & {p["id"] for p in match.worldwide(DOC["platforms"])})
+        f = os.path.join(SKILL, "data", "platforms.json")
+        def ids(*extra):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                match.main(["--file", f, "--about", "developer full-time job", "--top", "200", "--json", *extra])
+            return {r["id"] for r in json.loads(buf.getvalue())["results"]}
+        self.assertFalse(local & ids())
+        self.assertTrue(local <= ids("--include-local"))
+
+    def test_included_local_platforms_carry_a_caveat(self):
+        for _, _, p, why in match.rank(DOC["platforms"], profile("developer, full-time job")):
+            self.assertEqual(any("Indonesia-focused" in w for w in why), bool(p.get("indonesia_focus")), p["id"])
 
 
 class TextParsing(unittest.TestCase):

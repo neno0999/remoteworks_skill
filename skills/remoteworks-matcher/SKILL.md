@@ -44,7 +44,7 @@ For the top 5 (plus up to 3 "also worth a look"):
 - Fee in plain words, from the data's `fee` field
 - The link
 - Mark every platform with `affiliate: true` as **[Affiliate]**
-- Do not ask for or filter by the user's country. The list is meant for remote work anywhere. The exception is platforms whose reasons say "Indonesia-focused": they are local to Indonesia, so put them under "also worth a look" with that caveat, unless the user said they are in Indonesia
+- Do not ask about the user's country. The matcher already leaves out Indonesia-local platforms, so everything it returns is meant for remote work anywhere. Still remind the user to check that a platform accepts workers from their country. (`--include-local` adds the Indonesia-local ones back; use it only if the user asks for Indonesian local options.)
 - One honest caveat when relevant (strict screening for beginners, company careers pages are jobs not gigs, microtasks pay little)
 
 Then end with these two lines, always:

@@ -213,10 +213,15 @@ def score(p, prof):
         reasons.append("worker-side cost, check the fee")
 
     # Recommendations are the same for everyone: no country or region input, no score effect.
-    # Platforms flagged as Indonesia-local only get a caveat so nobody assumes they accept workers everywhere.
+    # Indonesia-local platforms are normally filtered out (see worldwide()); with --include-local they get a caveat.
     if p.get("indonesia_focus"):
         reasons.append("Indonesia-focused: check that it accepts workers from your country")
     return max(0.0, min(100.0, pts)), reasons
+
+
+def worldwide(platforms):
+    """Drop platforms flagged as Indonesia-local; everything else is treated as open to remote workers anywhere."""
+    return [p for p in platforms if not p.get("indonesia_focus")]
 
 
 def rank(platforms, prof):
@@ -255,6 +260,7 @@ def main(argv=None):
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--url", default=DEFAULT_URL)
     ap.add_argument("--file", help="read this JSON file instead of the network")
+    ap.add_argument("--include-local", action="store_true", help="also rank Indonesia-local platforms (excluded by default)")
     ap.add_argument("--offline", action="store_true", help="skip the network, use the bundled snapshot")
     a = ap.parse_args(argv)
 
@@ -264,7 +270,8 @@ def main(argv=None):
 
     doc, source = load(a.url, a.file, offline=a.offline)
     prof = build_profile(a)
-    ranked = rank(doc["platforms"], prof)[: a.top]
+    pool = doc["platforms"] if a.include_local else worldwide(doc["platforms"])
+    ranked = rank(pool, prof)[: a.top]
 
     items = [{
         "rank": i, "id": p["id"], "name": p["name"], "type": p["type"], "score": round(s, 1),
@@ -281,7 +288,7 @@ def main(argv=None):
         return 0
 
     print(f"Profile: skills={sorted(prof['skills']) or 'any'} level={prof['level']} want={prof['want']}")
-    print(f"Data: {source} ({len(doc['platforms'])} platforms)\n")
+    print(f"Data: {source} ({len(pool)} of {len(doc['platforms'])} platforms ranked)\n")
     for it in items:
         tag = " [Affiliate]" if it["affiliate"] else ""
         print(f"{it['rank']}. {it['name']}{tag}  ({it['type']}, score {it['score']})")
