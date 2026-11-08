@@ -27,8 +27,12 @@ jobs:
           assert new['meta']['license'] == 'CC BY 4.0', 'license changed'
           assert new['meta']['count'] == len(new['platforms']), 'count mismatch'
           assert len(new['platforms']) >= 0.8 * len(old['platforms']), 'dataset shrank more than 20%'
+          ids = [p['id'] for p in new['platforms']]
+          assert len(ids) == len(set(ids)), 'duplicate ids'
           for p in new['platforms']:
               assert p['link'].startswith('https://') and p['type'] in new['meta']['types'], p['id']
+              assert all(t in new['meta']['skill_tags'] for t in p['skills']), p['id']
+              assert isinstance(p['affiliate'], bool), p['id']
           print('ok', len(new['platforms']))
           PY
       - name: Copy, test, commit if changed
@@ -40,5 +44,5 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add -A
             git commit -m "chore(data): sync platforms.json from wasian.my.id"
-            git push
+            git push || { echo "::error::push failed (is the branch protected? allow github-actions[bot] or switch this step to open a PR)"; exit 1; }
           fi

@@ -88,6 +88,58 @@ class Sanity(unittest.TestCase):
         self.assertEqual(order(DOC["platforms"], prof), order(DOC["platforms"], prof))
 
 
+class TextParsing(unittest.TestCase):
+    """Free-text detection must not fire inside unrelated words."""
+
+    def test_no_midword_matches(self):
+        prof = profile("I want to build leads for tax syntax")
+        self.assertNotIn("design", prof["skills"])   # "ui" in build
+        self.assertEqual(prof["level"], "mid")        # "lead" is not seniority
+        self.assertIn("marketing", match.tags_from_text("run ads and seo"))
+        self.assertNotIn("marketing", match.tags_from_text("downloads and leads"))
+        self.assertNotIn("finance", match.tags_from_text("syntax"))
+
+    def test_data_entry_is_not_beginner(self):
+        prof = profile("data entry job")
+        self.assertEqual(prof["skills"], {"va_admin"})
+        self.assertEqual(prof["level"], "mid")
+        self.assertEqual(profile("entry-level data entry")["level"], "beginner")
+
+    def test_real_terms_still_detected(self):
+        self.assertIn("design", profile("desainer grafis")["skills"])
+        self.assertIn("design", profile("UI/UX designer")["skills"])
+        self.assertIn("writing", profile("saya suka menulis")["skills"])
+        self.assertEqual(profile("senior developer")["level"], "senior")
+        self.assertEqual(profile("kerja di Indonesia")["country"], "ID")
+        self.assertIn("customer_support", profile("customer support agent")["skills"])
+
+    def test_keywords_skip_filler(self):
+        kws = profile("developer looking for a full-time remote job")["keywords"]
+        for w in ("full", "time", "remote", "looking"):
+            self.assertNotIn(w, kws)
+
+
+class Loading(unittest.TestCase):
+    def test_offline_uses_snapshot_without_network(self):
+        orig = match.urllib.request.urlopen
+        match.urllib.request.urlopen = lambda *a, **k: self.fail("network used")
+        try:
+            doc, source = match.load(offline=True)
+        finally:
+            match.urllib.request.urlopen = orig
+        self.assertEqual(source, "snapshot")
+        self.assertEqual(len(doc["platforms"]), len(DOC["platforms"]))
+
+    def test_check_rejects_bad_data(self):
+        for mutate in (lambda p: p.update(link="http://x.example"),
+                       lambda p: p.update(type="bogus"),
+                       lambda p: p.update(skills="dev")):
+            doc = copy.deepcopy(DOC)
+            mutate(doc["platforms"][0])
+            with self.assertRaises(ValueError):
+                match._check(doc)
+
+
 class DataContract(unittest.TestCase):
     def test_meta_and_license(self):
         m = DOC["meta"]
@@ -112,6 +164,12 @@ class DataContract(unittest.TestCase):
         self.assertIn("never used in ranking", out)
         self.assertIn("CC BY 4.0", out)
         self.assertIn("[Affiliate]", out)
+
+    def test_cli_survives_ascii_only_stdout(self):
+        import io, contextlib
+        buf = io.TextIOWrapper(io.BytesIO(), encoding="ascii", errors="strict")
+        with contextlib.redirect_stdout(buf):
+            match.main(["--file", os.path.join(SKILL, "data", "platforms.json"), "--about", "designer", "--top", "30"])
 
 
 if __name__ == "__main__":
