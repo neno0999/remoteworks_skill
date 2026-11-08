@@ -1,0 +1,44 @@
+name: Sync data
+
+on:
+  schedule:
+    - cron: '17 3 * * 1'   # Mondays 03:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch live data
+        run: curl -fsSL --retry 3 -o /tmp/platforms.json https://wasian.my.id/remoteworks/platforms.json
+      - name: Validate (refuse broken or shrunken data)
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          new = json.load(open('/tmp/platforms.json', encoding='utf-8'))
+          old = json.load(open('skills/remoteworks-matcher/data/platforms.json', encoding='utf-8'))
+          assert new['meta']['license'] == 'CC BY 4.0', 'license changed'
+          assert new['meta']['count'] == len(new['platforms']), 'count mismatch'
+          assert len(new['platforms']) >= 0.8 * len(old['platforms']), 'dataset shrank more than 20%'
+          for p in new['platforms']:
+              assert p['link'].startswith('https://') and p['type'] in new['meta']['types'], p['id']
+          print('ok', len(new['platforms']))
+          PY
+      - name: Copy, test, commit if changed
+        run: |
+          cp /tmp/platforms.json skills/remoteworks-matcher/data/platforms.json
+          python3 -m unittest discover -s tests
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "chore(data): sync platforms.json from wasian.my.id"
+            git push
+          fi
