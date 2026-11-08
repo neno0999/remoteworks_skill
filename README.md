@@ -24,6 +24,7 @@ You can also run the matcher directly (Python 3, no dependencies):
 ```bash
 python3 skills/remoteworks-matcher/scripts/match.py --about "designer, beginner, Indonesia, freelance"
 python3 skills/remoteworks-matcher/scripts/match.py --skills dev --level senior --want employment --json
+python3 skills/remoteworks-matcher/scripts/match.py --about "data entry" --offline   # skip the network
 ```
 
 ## How ranking works

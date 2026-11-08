@@ -23,35 +23,57 @@ DEFAULT_URL = "https://wasian.my.id/remoteworks/platforms.json"
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_FILE = os.path.normpath(os.path.join(HERE, "..", "data", "platforms.json"))
 
-# free text (English + Indonesian) -> skill tag
+# free text (English + Indonesian) -> skill tag.
+# Patterns are matched with a left word boundary (see _rx) so "ui" does not hit "build"
+# and "ads" does not hit "leads". Short tokens also carry a trailing \b.
 SYNONYMS = {
-    "dev": r"developer|programmer|coding|coder|software|web ?dev|backend|frontend|devops|engineer|pemrograman",
-    "design": r"design|desain|desainer|graphic|grafis|ui|ux|logo|ilustrasi|illustrat",
-    "writing": r"writer|writing|penulis|nulis|konten|content|copywrit|blog|editor naskah|proofread",
-    "marketing": r"marketing|pemasaran|sosmed|social media|seo|iklan|ads|growth|community",
+    "dev": r"developer|programmer|coding|coder|software|web ?dev|backend|frontend|devops|engineer|pemrograman|programming",
+    "design": r"design|desain|desainer|graphic|grafis|ui\b|ux\b|logo|ilustrasi|illustrat",
+    "writing": r"writer|writing|penulis|menulis|nulis|konten|content|copywrit|blog|editor naskah|proofread",
+    "marketing": r"marketing|pemasaran|sosmed|social media|seo\b|iklan|ads\b|growth|community",
     "sales": r"sales|penjualan|business development",
-    "data": r"data analy|analis data|data science|analytics|machine learning|\bbi\b",
+    "data": r"data analy|analis data|data science|analytics|machine learning|bi\b",
     "ai_training": r"annotat|labeling|label data|ai training|ai tutor|rater|penilai ai",
     "translation": r"translat|terjemah|penerjemah|locali[sz]|linguist",
     "transcription": r"transcri|transkrip|caption",
-    "va_admin": r"virtual assistant|asisten virtual|\bva\b|admin|data entry|bookkeep|pembukuan",
-    "customer_support": r"customer (service|support)|\bcs\b|helpdesk|call cent|support",
-    "finance": r"finance|keuangan|accounting|akuntan|pajak|tax",
-    "product": r"product manag|product owner|produk",
+    "va_admin": r"virtual assistant|asisten virtual|va\b|admin|data entry|bookkeep|pembukuan",
+    "customer_support": r"customer (service|support|success)|cs\b|helpdesk|help desk|call cent|support (agent|specialist|rep)|layanan pelanggan|dukungan pelanggan",
+    "finance": r"finance|keuangan|accounting|akuntan|pajak|tax\b",
+    "product": r"product manag|product owner|produk manajer",
     "video_audio": r"video|audio|podcast|animasi|animation|voice|musik|editor video",
     "legal": r"legal|hukum|compliance|paralegal",
     "research": r"research|riset|survey|survei|akademik|academic",
     "education": r"teach|tutor|guru|mengajar|educat|coach|mentor",
 }
 LEVELS = {
-    "beginner": r"pemula|beginner|fresh ?grad|entry|junior|baru mulai|belum ada pengalaman",
-    "senior": r"senior|expert|ahli|berpengalaman|lead|principal",
+    "beginner": r"pemula|beginner|fresh ?grad|entry[- ]level|junior|baru mulai|belum ada pengalaman",
+    "senior": r"senior|expert|ahli|berpengalaman|principal|staff engineer",
 }
 WANTS = {
     "employment": r"karyawan|full[- ]?time|lamar|employment|employee|kerja tetap|lowongan",
     "microtask": r"micro ?task|receh|sampingan|side income|tugas kecil|survey berbayar|part[- ]?time santai",
     "freelance": r"freelanc|proyek|project|klien|client|lepas",
 }
+COUNTRY_RX = r"indonesia|indo\b|wni\b|rupiah"
+
+
+def _rx(pattern):
+    """Compile with a left word boundary: matches word starts, not mid-word."""
+    return re.compile(r"(?<![a-z0-9])(?:" + pattern + ")")
+
+
+SYNONYMS_RX = {k: _rx(v) for k, v in SYNONYMS.items()}
+LEVELS_RX = {k: _rx(v) for k, v in LEVELS.items()}
+WANTS_RX = {k: _rx(v) for k, v in WANTS.items()}
+COUNTRY_RE = _rx(COUNTRY_RX)
+
+# words that say nothing about the person's field; excluded from keyword matching
+STOPWORDS = set("""
+yang untuk dengan cari mau saya kerja bisa ingin dari dan atau pada agar akan juga lagi sudah belum
+with that from want looking this have need find help into some about also like would could should
+full time part remote work working worker jobs job anywhere level people person someone anything
+year years month months more most very much many other than then them they their there where which
+""".split())
 
 TYPE_FIT = {
     "freelance":  {"marketplace": 15, "vetted_network": 12, "language_services": 8, "ai_training": 6,
@@ -79,11 +101,14 @@ DISCLOSURE = ("Links marked [Affiliate] earn the site owner a commission at no c
 ATTRIBUTION = "Data: wasian.my.id/remoteworks (CC BY 4.0) https://wasian.my.id/remoteworks"
 
 
-def load(url=DEFAULT_URL, file=None, timeout=15):
+def load(url=DEFAULT_URL, file=None, timeout=5, offline=False):
     """Return (doc, source) where source is 'live', 'snapshot' or 'file'."""
     if file:
         with open(file, encoding="utf-8") as f:
             return _check(json.load(f)), "file"
+    if offline:
+        with open(DEFAULT_FILE, encoding="utf-8") as f:
+            return _check(json.load(f)), "snapshot"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "remoteworks-matcher/1.0"})
         with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -97,22 +122,29 @@ def load(url=DEFAULT_URL, file=None, timeout=15):
 def _check(doc):
     if not isinstance(doc, dict) or not doc.get("platforms"):
         raise ValueError("platforms.json has no platforms")
+    types = set(doc.get("meta", {}).get("types") or TYPE_FIT["any"])
     for p in doc["platforms"]:
         for k in ("id", "name", "type", "link", "skills"):
             if k not in p:
                 raise ValueError(f"platform {p.get('id')} missing {k}")
+        if not str(p["link"]).startswith("https://"):
+            raise ValueError(f"platform {p['id']} has a non-https link")
+        if p["type"] not in types:
+            raise ValueError(f"platform {p['id']} has unknown type {p['type']!r}")
+        if not isinstance(p["skills"], list):
+            raise ValueError(f"platform {p['id']} skills is not a list")
     return doc
 
 
 def tags_from_text(text):
     text = (text or "").lower()
-    return {tag for tag, rx in SYNONYMS.items() if re.search(rx, text)}
+    return {tag for tag, rx in SYNONYMS_RX.items() if rx.search(text)}
 
 
-def infer(text, key, table, default):
+def infer(text, table, default):
     text = (text or "").lower()
     for value, rx in table.items():
-        if re.search(rx, text):
+        if rx.search(text):
             return value
     return default
 
@@ -176,13 +208,14 @@ def build_profile(args):
     unknown = skills - set(SYNONYMS) - {"general"}
     if unknown:
         raise SystemExit(f"unknown skill tags: {sorted(unknown)}; valid: {sorted(SYNONYMS)}")
-    level = args.level or infer(about, "level", LEVELS, "mid")
-    want = args.want or infer(about, "want", WANTS, "any")
-    country = (args.country or ("ID" if re.search(r"indonesia|\bindo\b|\bwni\b|rupiah", about.lower()) else "")).upper()
-    known = list(SYNONYMS.values()) + list(LEVELS.values()) + list(WANTS.values()) + [r"indonesia|\bindo\b|rupiah|\bwni\b"]
-    stop = {"yang", "untuk", "dengan", "cari", "mau", "saya", "kerja", "bisa", "ingin", "dari", "dan", "atau", "with", "that", "from", "want", "looking"}
-    kws = [w for w in re.findall(r"[a-zA-Z]{4,}", about.lower())
-           if w not in stop and not any(re.search(rx, w) for rx in known)]
+    level = args.level or infer(about, LEVELS_RX, "mid")
+    want = args.want or infer(about, WANTS_RX, "any")
+    country = (args.country or ("ID" if COUNTRY_RE.search(about.lower()) else "")).upper()
+    known = list(SYNONYMS_RX.values()) + list(LEVELS_RX.values()) + list(WANTS_RX.values()) + [COUNTRY_RE]
+    kws = []
+    for w in re.findall(r"[a-zA-Z]{4,}", about.lower()):
+        if w not in STOPWORDS and w not in kws and not any(rx.search(w) for rx in known):
+            kws.append(w)
     return {"skills": skills, "level": level, "want": want, "country": country, "keywords": kws[:8]}
 
 
@@ -197,9 +230,14 @@ def main(argv=None):
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--url", default=DEFAULT_URL)
     ap.add_argument("--file", help="read this JSON file instead of the network")
+    ap.add_argument("--offline", action="store_true", help="skip the network, use the bundled snapshot")
     a = ap.parse_args(argv)
 
-    doc, source = load(a.url, a.file)
+    for stream in (sys.stdout, sys.stderr):  # fees contain non-ASCII (e.g. an em dash); avoid crashes on cp1252 consoles
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+    doc, source = load(a.url, a.file, offline=a.offline)
     prof = build_profile(a)
     ranked = rank(doc["platforms"], prof)[: a.top]
 

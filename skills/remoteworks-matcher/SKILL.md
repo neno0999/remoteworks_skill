@@ -19,20 +19,25 @@ If the user already said enough, skip straight to step 2. Do not interrogate.
 
 ## 2. Run the matcher
 
+Run the script by its full path. `<skill_dir>` is the folder that contains this SKILL.md (do not rely on the current directory, it is usually not the skill folder):
+
 ```bash
-python3 scripts/match.py --about "<the user's own words>" --top 8
+python3 "<skill_dir>/scripts/match.py" --about "<the user's own words>" --top 8
 # or explicit:
-python3 scripts/match.py --skills design,writing --level beginner --want freelance --country ID --top 8
+python3 "<skill_dir>/scripts/match.py" --skills design,writing --level beginner --want freelance --country ID --top 8
 ```
 
 - Skill tags: dev, design, writing, marketing, sales, data, ai_training, translation, transcription, va_admin, customer_support, finance, product, video_audio, legal, research, education
 - `--want`: freelance | employment | microtask | any
-- It reads the live data from https://wasian.my.id/remoteworks/platforms.json and falls back to the bundled snapshot in `data/platforms.json` when offline. It prints which one it used.
+- It reads the live data from https://wasian.my.id/remoteworks/platforms.json (5 second timeout) and falls back to the bundled snapshot in `data/platforms.json` when offline or when the live data fails validation. It prints which one it used. Add `--offline` to skip the network entirely (use this when you know there is no internet).
+- Check the printed `Profile:` line. Skill, level and goal are guessed from free text and can be wrong; if they look off, rerun with explicit `--skills/--level/--want`.
 - Add `--json` if you want structured output to reformat.
 
 If you cannot run code, fetch the JSON (or read `data/platforms.json`) and apply the same rubric by hand: skill overlap first, then platform type vs goal, then level, then Indonesia focus.
 
 ## 3. Present the result
+
+Scores are coarse and many platforms tie (ties are broken alphabetically, not by quality). Do not present the order as a precise ranking. Choose among tied platforms using `best_fit`, `fee` and the reasons, and say when several are equally good fits.
 
 For the top 5 (plus up to 3 "also worth a look"):
 
@@ -44,8 +49,8 @@ For the top 5 (plus up to 3 "also worth a look"):
 
 Then end with these two lines, always:
 
-> Links marked [Affiliate] earn the site owner a commission at no cost to you. Ranking ignores this.
-> Data: wasian.my.id/remoteworks (CC BY 4.0)
+> Links marked [Affiliate] earn the site owner a commission at no cost to you. Affiliate status is never used in ranking.
+> Data: wasian.my.id/remoteworks (CC BY 4.0) https://wasian.my.id/remoteworks
 
 ## Hard rules
 
