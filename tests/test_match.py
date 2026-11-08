@@ -77,10 +77,6 @@ class Sanity(unittest.TestCase):
         self.assertTrue({p["type"] for p in top} <= {"company_careers", "job_board", "staffing", "vetted_network"})
         self.assertGreaterEqual(sum(p["type"] in ("company_careers", "job_board", "staffing") for p in top), 3)
 
-    def test_indonesia_bonus(self):
-        ids = [p["id"] for p in self.top("designer in Indonesia, freelance", 3)]
-        self.assertTrue(any(i in ids for i in ("freelancercoid", "projectscoid")), ids)
-
     def test_beginner_not_pushed_to_strict_screening(self):
         for p in self.top("pemula desainer, freelance", 5):
             self.assertNotEqual(p["type"], "vetted_network", p["id"])
@@ -90,7 +86,7 @@ class Sanity(unittest.TestCase):
         self.assertEqual(order(DOC["platforms"], prof), order(DOC["platforms"], prof))
 
 
-class TieBreakAndRegion(unittest.TestCase):
+class TieBreak(unittest.TestCase):
     def ranked(self, text):
         return match.rank(DOC["platforms"], profile(text))
 
@@ -106,21 +102,20 @@ class TieBreakAndRegion(unittest.TestCase):
         if spec and gen:
             self.assertGreater(max(by_id[i] for i in spec), min(by_id[i] for i in gen))
 
-    def test_non_indonesian_gets_no_indonesia_local_boost(self):
-        top = [p["id"] for _, _, p, _ in self.ranked("designer from the Philippines, freelance")[:6]]
-        self.assertNotIn("freelancercoid", top)
-        self.assertNotIn("projectscoid", top)
+    def test_country_is_ignored(self):
+        base = order(DOC["platforms"], profile("designer, freelance"))
+        for text in ("designer, freelance, in Indonesia", "designer, freelance, from Nigeria"):
+            self.assertEqual(base, order(DOC["platforms"], profile(text)), text)
+        self.assertNotIn("country", profile("designer in Brazil"))
+        self.assertNotIn("region", profile("designer in Brazil"))
 
-    def test_regions_from_country_and_text(self):
-        self.assertEqual(profile("writer from Nigeria")["region"], "africa")
-        self.assertEqual(profile("dev in Brazil")["region"], "latam")
-        self.assertEqual(profile("designer in Germany")["region"], "europe")
-        self.assertEqual(profile("designer in the Philippines")["region"], "asia")
-        self.assertIsNone(profile("designer")["region"])
-
-    def test_region_bonus_never_excludes(self):
-        ids = {p["id"] for _, _, p, _ in self.ranked("designer from Nigeria")}
-        self.assertEqual(len(ids), len(DOC["platforms"]))
+    def test_indonesia_local_platforms_get_a_caveat_not_a_score_change(self):
+        local = [p for p in DOC["platforms"] if p.get("indonesia_focus")]
+        self.assertTrue(local)
+        prof = profile("developer, full-time job")
+        for score, _, p, why in match.rank(DOC["platforms"], prof):
+            has = any("Indonesia-focused" in w for w in why)
+            self.assertEqual(has, bool(p.get("indonesia_focus")), p["id"])
 
 
 class TextParsing(unittest.TestCase):
@@ -145,7 +140,6 @@ class TextParsing(unittest.TestCase):
         self.assertIn("design", profile("UI/UX designer")["skills"])
         self.assertIn("writing", profile("saya suka menulis")["skills"])
         self.assertEqual(profile("senior developer")["level"], "senior")
-        self.assertEqual(profile("kerja di Indonesia")["country"], "ID")
         self.assertIn("customer_support", profile("customer support agent")["skills"])
 
     def test_keywords_skip_filler(self):

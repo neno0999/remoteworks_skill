@@ -1,6 +1,6 @@
 ---
 name: remoteworks-matcher
-description: Find remote work and freelance platforms that fit a person's skills, level, country and goal, using the curated Remote Works dataset (134+ platforms, wasian.my.id/remoteworks). Use when someone asks where to find remote jobs, freelance clients, micro tasks, AI training or translation work, or wants to compare Upwork, Fiverr, job boards and similar platforms for their own profile.
+description: Find remote work and freelance platforms that fit a person's skills, level and goal, using the curated Remote Works dataset (134+ platforms, wasian.my.id/remoteworks). Use when someone asks where to find remote jobs, freelance clients, micro tasks, AI training or translation work, or wants to compare Upwork, Fiverr, job boards and similar platforms for their own profile.
 ---
 
 # Remote Works Matcher
@@ -8,12 +8,11 @@ description: Find remote work and freelance platforms that fit a person's skills
 Recommend platforms from the public Remote Works dataset and explain why each one fits.
 Reply in the language the user writes in. Input in English or Bahasa Indonesia is understood; the dataset is global.
 
-## 1. Get the profile (ask only what is missing, max 4 questions)
+## 1. Get the profile (ask only what is missing, max 3 questions)
 
 - What do they do or want to do? (skills, tools)
 - Level: beginner, mid or senior
 - Goal: freelance projects, a regular job, small side tasks, or open to anything
-- Country or region (optional). The data has no per-country eligibility info, so it only adds a small bonus for platforms focused on that region; Indonesia-local platforms are boosted only for users in Indonesia. Tell the user to check that a platform accepts workers from their country.
 
 If the user already said enough, skip straight to step 2. Do not interrogate.
 
@@ -24,7 +23,7 @@ Run the script by its full path. `<skill_dir>` is the folder that contains this 
 ```bash
 python3 "<skill_dir>/scripts/match.py" --about "<the user's own words>" --top 8
 # or explicit:
-python3 "<skill_dir>/scripts/match.py" --skills design,writing --level beginner --want freelance --country PH --top 8
+python3 "<skill_dir>/scripts/match.py" --skills design,writing --level beginner --want freelance --top 8
 ```
 
 - Skill tags: dev, design, writing, marketing, sales, data, ai_training, translation, transcription, va_admin, customer_support, finance, product, video_audio, legal, research, education
@@ -33,7 +32,7 @@ python3 "<skill_dir>/scripts/match.py" --skills design,writing --level beginner 
 - Check the printed `Profile:` line. Skill, level and goal are guessed from free text and can be wrong; if they look off, rerun with explicit `--skills/--level/--want`.
 - Add `--json` if you want structured output to reformat.
 
-If you cannot run code, fetch the JSON (or read `data/platforms.json`) and apply the same rubric by hand: skill overlap first, then platform type vs goal, then level, then a small regional-focus bonus.
+If you cannot run code, fetch the JSON (or read `data/platforms.json`) and apply the same rubric by hand: skill overlap first, then platform type vs goal, then level, then a few small tie-breakers.
 
 ## 3. Present the result
 
@@ -45,6 +44,7 @@ For the top 5 (plus up to 3 "also worth a look"):
 - Fee in plain words, from the data's `fee` field
 - The link
 - Mark every platform with `affiliate: true` as **[Affiliate]**
+- Do not ask for or filter by the user's country. The list is meant for remote work anywhere. The exception is platforms whose reasons say "Indonesia-focused": they are local to Indonesia, so put them under "also worth a look" with that caveat, unless the user said they are in Indonesia
 - One honest caveat when relevant (strict screening for beginners, company careers pages are jobs not gigs, microtasks pay little)
 
 Then end with these two lines, always:

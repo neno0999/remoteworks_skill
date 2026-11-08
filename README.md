@@ -1,8 +1,8 @@
 # Remote Works Matcher (Claude skill)
 
-A free Claude skill that recommends remote work and freelance platforms for **your** skills, level, goal and region. It reads the curated list at [wasian.my.id/remoteworks](https://wasian.my.id/remoteworks) (134 platforms, mostly global) and explains why each match fits.
+A free Claude skill that recommends remote work and freelance platforms for **your** skills, level and goal. It reads the curated list at [wasian.my.id/remoteworks](https://wasian.my.id/remoteworks) (134 platforms, mostly global) and explains why each match fits.
 
-Example: *"I'm a beginner graphic designer in the Philippines looking for freelance clients."* Indonesian input is understood too, and Claude replies in the language you write in.
+Example: *"I'm a beginner graphic designer looking for freelance clients."* Indonesian input is understood too, and Claude replies in the language you write in.
 
 ## Install
 
@@ -22,8 +22,8 @@ Describe yourself to Claude. It asks only for what is missing, ranks platforms, 
 You can also run the matcher directly (Python 3, no dependencies):
 
 ```bash
-python3 skills/remoteworks-matcher/scripts/match.py --about "beginner designer in Nigeria, freelance"
-python3 skills/remoteworks-matcher/scripts/match.py --skills dev --level senior --want employment --country BR --json
+python3 skills/remoteworks-matcher/scripts/match.py --about "beginner designer, freelance"
+python3 skills/remoteworks-matcher/scripts/match.py --skills dev --level senior --want employment --json
 python3 skills/remoteworks-matcher/scripts/match.py --about "data entry" --offline   # skip the network
 ```
 
@@ -37,18 +37,15 @@ Score 0 to 100, deterministic, ties broken alphabetically:
 | Platform type vs your goal (freelance, employment, microtask) | up to +15 |
 | Your level (beginner vs strict screening, senior vs vetted networks) | -10 to +5 |
 | Keywords from your description found in the platform text | up to +15 |
-| Regional focus (see below) | +6, or +10 for Indonesia-local platforms when you are in Indonesia |
 | Tie-breakers: specialist over generalist, level wording in the platform's own text, worker-side fee | +6 to -1 in total |
 
 The tie-breakers are small on purpose, so they separate near-equal platforms but never override skill or goal fit.
 
-### Regions and "global" use
+### Worldwide, no country filter
 
-Most platforms (126 of 134) are global and carry no country restriction. The dataset has **no per-country eligibility data**, so nothing is ever hidden or excluded because of your country. Your country only adds a small bonus to platforms whose own description says they focus on your region (Asia, Africa, Europe, Latin America). The 8 platforms flagged `indonesia_focus` are the Indonesia-local ones (for example Jobstreet, Kalibrr, Glints); they are boosted only for users in Indonesia.
+The list is meant for remote work anywhere, so the matcher never asks for or filters by your country, and every user gets the same ranking for the same profile. The dataset has no per-country eligibility data, so check that a platform accepts workers from your country before signing up. The 8 platforms flagged `indonesia_focus` (for example Jobstreet, Kalibrr, Glints) are local to Indonesia: they are kept in the data and get a visible caveat, with no change to their score.
 
-`--country` accepts any ISO code. Known codes (for example PH, NG, BR, DE) also set a region; unknown codes simply give no regional bonus.
-
-Skill tags, type, region and the Indonesia flag are **derived automatically** from the source text, so treat them as hints, not verified facts. Always check a platform's own terms, fees, payout options and whether it accepts workers from your country.
+Skill tags, type and the Indonesia flag are **derived automatically** from the source text, so treat them as hints, not verified facts. Always check a platform's own terms, fees, payout options and whether it accepts workers from your country.
 
 ## Honesty
 
